@@ -1,0 +1,563 @@
+/**
+ * This function sends the email to the speaker
+ *
+ * Returns true on success, false on error
+ */
+function hidden_send_email(HIDDEN FOR SECURITY){
+
+    // GET GUIDELINES ATTACHMENT
+    $attachment_id = HIDDEN FOR SECURITY
+    $attachment_path = HIDDEN FOR SECURITY
+    $attachments = HIDDEN FOR SECURITY
+	
+	//OUTSIDE LINKS
+	$hidden = 'HIDDEN FOR SECURITY';
+	$hidden = 'HIDDEN FOR SECURITY';
+	$hidden = "HIDDEN FOR SECURITY";
+	
+	// GET CONFIG DETAILS
+	$event_end_TIME = $config->end_time ?? '';
+	$event_end_dt = DateTime::createFromFormat('H:i', $event_end_TIME);
+	$event_end_TIME_12 = $event_end_dt->format('g:i A');
+	$study_due_date = $config->study_due_date ?? '';
+	$study_due_date_formatted = date('l, F jS, Y', strtotime($study_due_date));
+	$study_linkA = $config->study_link_a ?? '';
+	$study_allowance = $config->allowance_a ?? '';
+	$study_allowance = "$" . $study_allowance;
+	$other_allowance = $config->allowance_b ?? '';
+	$other_allowance = "$" . $other_allowance;
+	$org_msg = $config->org_msg ?? '';
+
+    // GRAB USER DETAILS
+    $fn = $details['fname'];
+    $to = $details['to'];
+    $token = $details['token'];
+    $key = $details['key'];
+    $due_date = $details['due_date'];
+    $due_date_formatted = date('l, F jS, Y', strtotime($due_date));
+    $due_date_subject = date('F jS, Y', strtotime($due_date));
+
+    // GRAB EVENT DETAILS
+    $program_title = $details['program_title'];
+    $event_dates = $details['event_dates'];
+    $event_start = $details['event_start'];
+    $event_end = $details['event_end'];
+    
+    // END DATE FORMATS
+    $event_end_dow = date('l', strtotime($event_end));
+    $event_end_formatted = date('l, F jS, Y', strtotime($event_end));
+    $event_one_day_after_end = date('l, F jS, Y', strtotime($event_end . ' +1 day'));
+    
+    // START DATE FORMATS
+    $event_one_day_before_start = date('l, F jS, Y', strtotime($event_start . ' -1 day'));
+    $event_two_days_before_start = date('l, F jS, Y', strtotime($event_start . ' -2 days'));
+    $event_two_days_before_start_dow = date('l', strtotime($event_start . ' -2 days'));
+    $event_sixty_days_before_start = date('l, F jS, Y', strtotime($event_start . ' -60 days'));
+    
+    // BOTH
+    $event_hotel_date_range = $event_one_day_before_start . " - " . $event_end_formatted;
+ 
+    // GRAB PC DETAILS
+    $pc_fullname = $details['HIDDEN FOR SECURITY'];
+    $pc_role = $details['HIDDEN FOR SECURITY'];
+    $pc_email = $details['HIDDEN FOR SECURITY'];
+
+    // UNIQUE SPEAKER CONSTRAINT LINK
+    $speaker_link = "HIDDEN FOR SECURITY";
+
+    // EMAIL SUBJECT
+    $subject = "DUE {$due_date_subject} | HIDDEN FOR SECURITY Speaker Talk Info, Travel, and Funding for {$program_title}";
+	
+    // START BODY BUILD
+	//S1
+	$body = "Dear {$fn},<br/><br/>";
+	$body .= "HIDDEN FOR SECURITY";
+	
+	//SEND EMAIL
+    $sent = wp_mail($to, $subject, $body, $headers, $attachments);
+    return $sent;
+}
+
+/**
+ * Update the meta data attached to invitation for the sending of survey
+ * link.
+ * Updates sent_at value to current timestamp, and due date sent for
+ * future reference.
+ *
+ * Returns true on success, false on error
+ */
+function update_invitation_meta($meta_value, $item_id, $field_id, $error_code){
+    global $wpdb;
+    $error_log = false;
+    $error_code_section = '';
+    // try to update first
+    $updated = $wpdb->update(
+        "{$wpdb->prefix}HIDDEN",
+        ['meta_value' => $meta_value],
+        ['item_id' => $item_id, 'field_id' => $field_id]
+    );
+    // check if update worked
+    if ($updated === false) {
+        $error_log = true;
+        $error_code_section = 'UF';
+    } else if ($updated === 0) {
+        // likely missing row, try to insert
+        $inserted = $wpdb->insert(
+            "{$wpdb->prefix}HIDDEN", 
+            [
+                'item_id' => $item_id,
+                'field_id' => $field_id,
+                'meta_value' => $meta_value
+            ]
+        );
+        // check if insert worked
+        if ($inserted === false) {
+            $error_log = true;
+            $error_code_section = 'IF';
+        }
+    }
+    // if error, show error msg
+    if ($error_log) {
+        $curr_query = $wpdb->last_query;
+        $curr_error = $wpdb->last_error;
+        error_log("SQL ERROR: speaker survey $error_code-$error_code_section: [ $curr_error ] with query [ $curr_query ]");
+    }
+    return $error_log == true ? false : true;
+}
+
+/**
+ * Main function that builds and sends out the speaker emails
+ */
+function get_speaker_survey_table($postid){
+    global $wpdb;
+
+    // CHECK POSTID
+    $post_id = ! empty($postid) ? $postid : '';
+    if (! $post_id || empty($post_id)) {
+        echo "<p>Missing post ID.</p>";
+        return;
+    }
+
+    // CHECK PROGRAM CODE
+    $program_code = get_field("HIDDEN FOR SECURITY", $post_id);
+    if (empty($program_code)) {
+        echo "<p>Missing program code.</p>";
+        return;
+    }
+
+    // CONFIG (DETAILS) FORM IDS
+	$config_form_id = HIDDEN FOR SECURITY;
+	$field_config_post_id = HIDDEN FOR SECURITY;
+	$field_end_time = HIDDEN FOR SECURITY;
+	$field_study_due_date = HIDDEN FOR SECURITY;
+	$field_study_link = HIDDEN FOR SECURITY;
+	$field_study_allowance = HIDDEN FOR SECURITY;
+	$field_other_allowance = HIDDEN FOR SECURITY;
+	$field_org_msg = HIDDEN FOR SECURITY;
+
+	$config_sql = "
+		SELECT
+		  eet.meta_value AS end_time,
+		  sdd.meta_value AS study_due_date,
+		  slka.meta_value AS study_link_a,
+		  allowa.meta_value AS allowance_a,
+		  allowb.meta_value AS allowance_b,
+		  om.meta_value AS org_msg
+
+		FROM {$wpdb->prefix}HIDDEN i
+
+		INNER JOIN {$wpdb->prefix}HIDDEN pid
+		  ON pid.item_id = i.id AND pid.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN eet
+		  ON eet.item_id = i.id AND eet.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN sdd
+		  ON sdd.item_id = i.id AND sdd.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN slka
+		  ON slka.item_id = i.id AND slka.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN allowa
+		  ON allowa.item_id = i.id AND allowa.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN allowb
+		  ON allowb.item_id = i.id AND allowb.field_id = %d
+
+		LEFT JOIN {$wpdb->prefix}HIDDEN om
+		  ON om.item_id = i.id AND om.field_id = %d
+
+		WHERE i.form_id = %d
+		AND pid.meta_value = %s
+		LIMIT 1
+		";
+
+	$config = $wpdb->get_row(
+		$wpdb->prepare(
+			$config_sql,
+			$field_config_post_id,
+			$field_end_time,
+			$field_study_due_date,
+			$field_study_link,
+			$field_study_allowance,
+			$field_other_allowance,
+			$field_org_msg,
+			$config_form_id,
+			$post_id
+			)
+		);
+
+    $workshop_title = get_the_title($post_id) ?? 'No Title Found';
+    $back_link = "HIDDEN FOR SECURITY";
+	$help_link = "HIDDEN FOR SECURITY";
+    //NO CONFIG DETAILS? SHOW FORMIDABLE FORM
+    if (empty($config) || empty($config->end_time)) {
+		echo "<a href='$back_link' style='float: left; color: #D0D0D0; font-size: 20px;' title='Back'><i class='fas fa-arrow-circle-left'></i></a>";
+		echo "<a target='_blank' href='$help_link' style='float: right; color: #15256A; font-size: 20px;' title='Help'><i class='fas fa-question-circle'></i></a>";
+		echo "<hr/>";
+		echo "<h3>$workshop_title</h3><br/>";
+        echo "<div style='padding:10px;background:#fff3cd;border-radius: 5px;border:1px solid #ffeeba;margin-bottom:20px;'>
+        <p><b>Email details not found.</b> Please fill out the details below and submit.</p>
+        <p>After submission, you will be able to see the table of speakers to send emails.</p></div>";
+        echo do_shortcode('[frm-set-get postid="' . esc_attr($post_id) . '"]');
+        echo do_shortcode('[formidable id="' . $config_form_id . '"]');
+        return;
+    }
+	
+	$event_end_TIME = $config->end_time ?? '';
+	$study_due_date = $config->study_due_date ?? '';
+	$study_linkA = $config->study_link_a ?? '';
+	$study_allowance = $config->allowance_a ?? '';
+	$other_allowance = $config->allowance_b ?? '';
+	$org_msg = $config->org_msg ?? '';
+
+    //PC AUTO DETECTION
+    $pc_fullname = 'PC Team';
+    $pc_role = 'hidden Team Member';
+    $pc_hidden_email = 'HIDDEN FOR SECURITY';
+    $pc_output = $pc_fullname . " (" . $pc_role . ")";
+	SOME CODE HIDDEN FOR SECURITY
+
+    //EVENT BASE DATA
+    $workshop_title = get_the_title($post_id);
+    $event_start_date = get_post_meta($post_id, '_event_start_date', true);
+    $event_end_date = get_post_meta($post_id, '_event_end_date', true);
+    $event_dates = '';
+    if (!empty($event_start_date) && !empty($event_end_date)) {
+        $event_dates = date('l, M jS, Y', strtotime($event_start_date)) . " - " . date('l, M jS, Y', strtotime($event_end_date));
+    }
+
+    //RESPONSE DUE DATE (ONLY EDITABLE FIELD)
+    $due_date = $_POST['due_date'] ?? date('Y-m-d', strtotime('+7 days'));
+
+    //GET ALL SPEAKERS THAT RESPONDED YES
+    $field_post_id = HIDDEN FOR SECURITY;
+    $field_program_code = HIDDEN FOR SECURITY; 
+    $field_fname = HIDDEN FOR SECURITY; 
+    $field_lname = HIDDEN FOR SECURITY;
+    $field_token = HIDDEN FOR SECURITY;
+    $field_email = HIDDEN FOR SECURITY; 
+    $field_role = HIDDEN FOR SECURITY; 
+    $field_ccs = HIDDEN FOR SECURITY; 
+    $field_sent = HIDDEN FOR SECURITY; 
+    $field_due_date = HIDDEN FOR SECURITY; 
+    $parent_key_field = HIDDEN FOR SECURITY; 
+    $field_response = HIDDEN FOR SECURITY; 
+    $responses_form = HIDDEN FOR SECURITY;
+    $speakers_form = HIDDEN FOR SECURITY; 
+    $survey_form = HIDDEN FOR SECURITY; 
+    $survey_key_field = HIDDEN FOR SECURITY;
+
+    //SQL BUILD
+    $sql = "
+	SELECT
+	  s.id AS speaker_id,
+	  s.item_key,
+	  fn.meta_value AS first_name,
+	  ln.meta_value AS last_name,
+	  tok.meta_value AS token,
+	  em.meta_value AS email,
+	  cc.meta_value AS ccs,
+	  sent.meta_value AS sent_at,
+	  dd.meta_value AS due_date,
+	  MAX(survey_item.id) AS survey_response_id,
+	  SUBSTRING_INDEX(GROUP_CONCAT(resp.meta_value ORDER BY r.id DESC), ',', 1) AS latest_response
+	  
+	FROM {$wpdb->prefix}frm_items s
+	
+	INNER JOIN {$wpdb->prefix}hidden pc
+	  ON pc.item_id = s.id AND pc.field_id = %d AND pc.meta_value = %s
+	  
+	LEFT JOIN {$wpdb->prefix}hidden fn
+	  ON fn.item_id = s.id AND fn.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden ln
+	  ON ln.item_id = s.id AND ln.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden tok
+	  ON tok.item_id = s.id AND tok.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden em
+	  ON em.item_id = s.id AND em.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden role
+	  ON role.item_id = s.id AND role.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden cc
+	  ON cc.item_id = s.id AND cc.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden sent
+	  ON sent.item_id = s.id AND sent.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden dd
+	  ON dd.item_id = s.id AND dd.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden parent
+	  ON parent.meta_value = s.item_key AND parent.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}frm_items r
+	  ON r.id = parent.item_id AND r.form_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden resp
+	  ON resp.item_id = r.id AND resp.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}hidden survey_parent
+	  ON survey_parent.meta_value = s.item_key AND survey_parent.field_id = %d
+	  
+	LEFT JOIN {$wpdb->prefix}frm_items survey_item
+	  ON survey_item.id = survey_parent.item_id AND survey_item.form_id = %d
+	  
+	WHERE s.form_id = %d
+	AND role.meta_value = 'HIDDEN FOR SECURITY'
+	
+	GROUP BY s.id
+	
+	HAVING latest_response = 'HIDDEN FOR SECURITY'
+	
+	ORDER BY ln.meta_value ASC, fn.meta_value ASC
+	";
+
+    $speakers = $wpdb->get_results(
+        $wpdb->prepare(
+            $sql, 
+            $field_program_code, 
+            $program_code, 
+            $field_fname, 
+            $field_lname, 
+            $field_token, 
+            $field_email, 
+            $field_role, 
+            $field_ccs, 
+            $field_sent, 
+            $field_due_date, 
+            $parent_key_field, 
+            $responses_form, 
+            $field_response, 
+            $survey_key_field, 
+            $survey_form, 
+            $speakers_form
+            )
+        );
+
+    //SEND EMAILS
+    $success = true;
+    if (isset($_POST['send_all']) && !empty($speakers)) {
+        foreach ($speakers as $speaker) {
+            if (!empty($speaker->sent_at) || !empty($speaker->survey_response_id)) {
+                continue;
+            }
+
+            $details = [
+                "fname" => $speaker->first_name,
+                "to" => $speaker->email,
+                "program_title" => $workshop_title,
+                "event_dates" => $event_dates,
+                "event_start" => $event_start_date,
+                "event_end" => $event_end_date,
+                "pc_fullname" => $pc_fullname,
+                "pc_role" => $pc_role,
+                "pc_hidden_email" => $pc_hidden_email,
+                "token" => $speaker->token,
+                "key" => $speaker->item_key,
+                "due_date" => $due_date
+            ];
+
+            // BCCs and CCs
+            $bcc = "HIDDEN FOR SECURITY";
+            $ccs = $speaker->ccs ?? 'HIDDEN FOR SECURITY';
+            $headers = [
+                'Content-Type: text/html; charset=UTF-8',
+                'From: HIDDEN FOR SECURITY <HIDDEN FOR SECURITY>',
+                'Bcc: ' . $bcc,
+                'Cc: ' . $ccs
+            ];
+
+            $sent = hidden_send_email($details, $config, $headers);
+            if ($sent) {
+                $timestamp = current_time('mysql');
+                $update_status = update_invitation_meta($timestamp, $speaker->speaker_id, $field_sent, 'ERROR1');
+                $update_due = update_invitation_meta($due_date, $speaker->speaker_id, $field_due_date, 'ERROR2');
+                if (! $update_status || ! $update_due) {
+                    $success = false;
+                    echo "<div style='padding:10px;background:#e6ffe6;border:1px solid #99cc99;margin-bottom:20px;'>";
+                    echo "Error sending emails. Contact Anna Mikula.";
+                    echo "</div>";
+                    break;
+                }
+            } else {
+                $success = false;
+                echo "<div style='padding:10px;background:#e6ffe6;border:1px solid #99cc99;margin-bottom:20px;'>";
+                echo "Error sending emails. Contact Anna Mikula.";
+                echo "</div>";
+                break;
+            }
+        }
+
+        if ($success) {
+            $href = "HIDDEN FOR SECURITY" . $post_id;
+            $click_me = "<a href=$href>CLICK ME!</a>";
+            echo "<div style='padding:10px;background:#e6ffe6;border:1px solid #99cc99;margin-bottom:20px;'>";
+            echo "Emails sent successfully. Click this link to see table changes: $click_me";
+            echo "</div>";
+        }
+    }
+
+    //TOP UI (ONLY DUE DATE EDITABLE)
+    $help_link = "HIDDEN FOR SECURITY";
+    ?>
+<a href="<?php echo esc_attr($back_link); ?>" style="float: left; color: #D0D0D0; font-size: 20px;" title="Back"><i class="fas fa-arrow-circle-left"></i></a>
+<a target="_blank" href="<?php echo esc_attr($help_link); ?>" style="float: right; color: #15256A; font-size: 20px;" title="Help"><i class="fas fa-question-circle"></i></a>
+<hr/>
+<h3><?php echo esc_attr($workshop_title); ?></h3>
+<p><em>Send Speaker Constraint Emails</em></p>
+<br/>
+<p>NOTE: If a speaker has already been sent their survey email, they will not receive another email.</p>
+<p>NOTE: If a speaker has already responded, via YAMM or another method, they will not receive an email.</p>
+<form method="POST" style="margin-bottom: 30px;" id="ssurvey_upload_form">
+	<br/>
+	<p class="margin-left-ss"><b>Event End Time:</b> <?php echo esc_attr($event_end_TIME); ?></p>
+	<p class="margin-left-ss"><b>Study Booking Due Date:</b> <?php echo esc_attr($study_due_date); ?></p>
+	<p class="margin-left-ss"><b>Study Courtesy Block Link:</b> <?php echo esc_attr($study_linkA); ?></p>
+	<p class="margin-left-ss"><b>Study Allowance:</b> $<?php echo esc_attr($study_allowance); ?> USD</p>
+	<p class="margin-left-ss"><b>Other Allowance:</b> $<?php echo esc_attr($other_allowance); ?> USD</p>
+	<p class="margin-left-ss"><b>Organizer Message:</b> <?php echo esc_attr($org_msg); ?></p>
+	<hr/>
+	<p class="margin-left-ss"><b>Team Member:</b> <?php echo esc_attr($pc_output); ?></p>
+	<p class="margin-left-ss">
+		<b>Due Date:</b> <input type="date" name="due_date" id="due_date_ssurvey_upload" value="<?php echo esc_attr($due_date); ?>" required>
+	</p>
+	<p>
+		<button name="send_all" type="submit" id="ssurvey_button">
+			<b>Send All Unsent Emails</b>
+		</button>
+	</p>
+</form>
+<style>
+p.main_directions_ss{
+    font-size: 22px;		
+}
+p.margin-left-ss{
+	margin-left: 15px !important;
+}
+#google_doc_ssurvey_upload {
+	height: 25px;
+	width: 95%;
+	border-radius: 5px;
+	border: 1px solid #d8d8d8;
+}
+
+#due_date_ssurvey_upload {
+	height: 25px;
+	border-radius: 5px;
+	border: 1px solid #d8d8d8;
+}
+
+#ssurvey_upload_form {
+	background-color: #F7F7F7;
+	border-radius: 5px;
+	border: 1px solid #d8d8d8;
+	padding: 5px;
+}
+
+#pc_coord_ssurvey_upload {
+	width: 50%;
+	height: 25px;
+	border-radius: 5px;
+	border: 1px solid #d8d8d8;
+}
+
+#ssurvey_button {
+	background-color: #4CAF50;
+	color: white;
+	padding: 15px 25px;
+	text-align: center;
+	text-decoration: none;
+	display: inline-block;
+	border-radius: 8px;
+	cursor: pointer;
+	border: none;
+	font-size: 16px;
+	margin-top: 10px;
+	margin-left: 15px;
+}
+
+#ssurvey_button:hover {
+	background-color: #45a049;
+}
+
+.ss_table_row {
+	background-color: #F7F7F7;
+	border-radius: 5px;
+	border: 1px solid #15256A;
+}
+</style>
+<?php
+    //BUILD SPEAKER TABLE
+    if (is_array($speakers) && count($speakers) > 0) {
+        echo "<hr/>";
+    	$staff_page_link = "HIDDEN FOR SECURITY";
+		echo "<a href='$staff_page_link' style='float: right;' target='_blank'>Response Table</a><br/><br/>";
+        echo "<table border='1' cellpadding='8' style='border-collapse:collapse;width:100%;'>";
+        echo "<tr class='ss_table_row'>";
+        echo "<th>Row</th>";
+        echo "<th>Name</th>";
+        echo "<th>Email</th>";
+        echo "<th>Due Date</th>";
+        echo "<th>Email Sent Status</th>";
+        echo "<th>Response</th>";
+        echo "</tr>";
+
+        $count = 0;
+        foreach ($speakers as $speaker) {
+            $count ++;
+            echo "<tr>";
+            $name = $speaker->first_name . " " . $speaker->last_name;
+            $response = empty($speaker->survey_response_id) ? '' : $speaker->survey_response_id;
+            echo "<td>" . $count . "</td>";
+            $credentials = '?token=' . $speaker->token . "&key=" . $speaker->item_key;
+            $speaker_survey_link = "HIDDEN FOR SECURITY" . $credentials;
+            echo "<td><a target='_blank' href=$speaker_survey_link>" . esc_html($name) . "</a></td>";
+            echo "<td>" . esc_html($speaker->email) . "</td>";
+            echo "<td>" . esc_html($speaker->due_date) . "</td>";
+            if (! empty($speaker->sent_at)) {
+                $time = date('M jS Y g:i A', strtotime($speaker->sent_at));
+                echo "<td style='color:green;font-weight:bold;'>{$time}</td>";
+            } else {
+                echo "<td style='color:#cc0000;'>Not Sent</td>";
+            }
+            if (empty($response)) {
+                echo "<td style='color:#cc0000;text-align:center;'><i class='fas fa-times-circle'></i></td>";
+            } else {
+                $response_link = 'HIDDEN FOR SECURITY' . $response;
+                $response_a = "<a target='_blank' style='color:green;text-decoration:none;' href=$response_link><i class='fas fa-external-link-alt'></i></a>";
+                echo "<td style='text-align:center;'>$response_a</td>";
+            }
+            echo "</tr>";
+        }
+        echo "</table>";
+        echo "<p><em>Click a speakers name to open their survey link in a new window.</em></p>";
+        echo "<p><em>Click a speakers response to open their survey response in a new window.</em></p>";
+    } else {
+        echo "<p><em>No speakers have responded YES to their invitation.</em></p>";
+    }
+}
